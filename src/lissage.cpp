@@ -21,6 +21,8 @@ typedef Polyhedron::Halfedge_around_facet_circulator Halfedge_facet_circulator;
 typedef Polyhedron::Halfedge_around_vertex_circulator Halfedge_vertex_circulator;
 typedef std::map<Polyhedron::Vertex_handle, Point_3> Vertex_coord_map;
 typedef std::map<Polyhedron::Vertex_handle, double> Vertex_double_map;
+typedef std::map<Polyhedron::Vertex_handle, bool> Vertex_bool_map;
+typedef std::queue<Polyhedron::Vertex_handle> Vertex_queue;
 
 double maxDist = 0;
 
@@ -57,6 +59,23 @@ void areaComputing(Polyhedron &mesh, Vertex_double_map &map) {
 	}
 }
 
+double areaComputing(Polyhedron::Facet_handle &facet) {
+	Halfedge_facet_circulator h_it = facet->facet_begin();
+	double area;
+	Point_3 p,q,r;
+	p = h_it->vertex()->point();
+	++h_it;
+	q = h_it->vertex()->point();
+	++h_it;
+	r = h_it->vertex()->point();
+	area = sqrt(CGAL::squared_area(p,q,r));
+	return area;
+}
+
+double pond(Point_3 a, Point_3 b, double radius) {
+	return 1 - (sqrt(CGAL::squared_distance(a, b)) / radius);
+}
+
 void laplacianSmoothing(Polyhedron &mesh, Vertex_coord_map &coords, Vertex_coord_map &newCoords) {
 	Vertex_iterator v_it = mesh.vertices_begin();
 	Vertex_double_map mapArea;
@@ -64,9 +83,9 @@ void laplacianSmoothing(Polyhedron &mesh, Vertex_coord_map &coords, Vertex_coord
 	double sumArea;
 	areaComputing(mesh, mapArea);
 	while (v_it != mesh.vertices_end()) {
-		x = 0;
-		y = 0;
-		z = 0;
+		x = 0.0;
+		y = 0.0;
+		z = 0.0;
 		sumArea = 0.0;
 		Halfedge_vertex_circulator h_it = v_it->vertex_begin();
 		do {
@@ -76,6 +95,55 @@ void laplacianSmoothing(Polyhedron &mesh, Vertex_coord_map &coords, Vertex_coord
 			sumArea += mapArea[v_it];
 			++h_it;
 		} while (h_it != v_it->vertex_begin());
+		newCoords[v_it] = Point_3(x/sumArea, y/sumArea, z/sumArea);
+		++v_it;
+	}
+}
+
+void laplacianSmoothingRadius(Polyhedron &mesh, Vertex_coord_map &coords, Vertex_coord_map &newCoords, double radius) {
+	Vertex_iterator v_it = mesh.vertices_begin();
+	Vertex_bool_map parcours;
+	double x, y, z, impact;
+	double sumArea, areaPoint;
+	int nbPoints;
+	Vertex_queue q;
+	Polyhedron::Vertex_handle v, s;
+	while (v_it != mesh.vertices_end()) {
+		x = 0;
+		y = 0;
+		z = 0;
+		sumArea = 0.0;
+		nbPoints = 0;
+		for (Vertex_iterator i = mesh.vertices_begin(); i != mesh.vertices_end(); i++) {
+			parcours[i] = false;
+		}
+		q.push(v_it);
+		parcours[v_it] = true;
+		while (!q.empty()) {
+			v = q.front();
+			q.pop();
+			areaPoint = 0.0;
+			Halfedge_vertex_circulator h_it = v->vertex_begin();
+			do {
+				Polyhedron::Facet_handle f = h_it->facet();
+				areaPoint += areaComputing(f);
+			} while (h_it != v->vertex_begin());
+			//impact = pond(v->point(), v_it->point(), radius);
+			//impact = pond(v->point(), v_it->point(), radius) * pond(v->point(), v_it->point(), radius);
+			impact = 1 - (pond(v->point(), v_it->point(), radius) * pond(v->point(), v_it->point(), radius));
+			x += coords[v].x() * areaPoint * impact;
+			y += coords[v].y() * areaPoint * impact;
+			z += coords[v].z() * areaPoint * impact;
+			sumArea += areaPoint * impact;
+			do {
+				s = h_it->opposite()->vertex();
+				if (!parcours[s] && sqrt(CGAL::squared_distance(v_it->point(), s->point())) < radius) {
+					q.push(s);
+					parcours[s] = true;
+				}
+				++h_it;
+			} while (h_it != v->vertex_begin());
+		}
 		newCoords[v_it] = Point_3(x/sumArea, y/sumArea, z/sumArea);
 		++v_it;
 	}
@@ -117,7 +185,7 @@ void saveColorDistance(Polyhedron &mesh, Vertex_coord_map &coords1, Vertex_coord
 	Vertex_double_map distMap;
 	distanceBetweenCoords(mesh, coords1, coords2, distMap);
 	for (Vertex_iterator v_it = mesh.vertices_begin(); v_it != mesh.vertices_end(); ++v_it) {
-		output << coords2[v_it] << " 255 " << (1.0 - (distMap[v_it]/maxDist)) * 255 << ' ' << (1.0 - (distMap[v_it]/maxDist)) * 255 << " 1" << std::endl;
+		output << coords2[v_it] << " 255 " << (int)((1.0 - (distMap[v_it]/maxDist)) * 255) << ' ' << (int)((1.0 - (distMap[v_it]/maxDist)) * 255) << " 1" << std::endl;
 	}
 	for (Facet_iterator it = mesh.facets_begin(); it != mesh.facets_end(); ++it) {
 		Halfedge_facet_circulator j = it->facet_begin();
@@ -131,8 +199,9 @@ void saveColorDistance(Polyhedron &mesh, Vertex_coord_map &coords1, Vertex_coord
 }
 
 int main(int argc, char *argv[]) {
-	if (argc < 2) {
-		std::cerr << "Il manque un paramètre au programme. Veuillez lui donner en entrée un nom de fichier au format off." << std::endl;
+	if (argc < 3) {
+		std::cerr << "Il manque un paramètre au programme. Veuillez lui donner en entrée un nom de fichier au format off "
+		          << "et un type de lissage (n pour normal, r pour rayon). Si le type de lissage est r, il faut mentionner un rayon de type double." << std::endl;
 		return 1;
 	}
 	
@@ -143,9 +212,30 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	
+	char lissage = *(argv[2]);
+	if (lissage != 'n' && lissage != 'r') {
+		std::cerr << "Le type de lissage est incorrecte." << std::endl;
+		return 1;
+	}
+	
+	double radius;
+	if (lissage == 'r') {
+		if (argc < 4) {
+			std::cerr << "Il faut fournir un rayon de type double." << std::endl;
+			return 1;
+		} else {
+			radius = atof(argv[3]);
+			std::cout << radius << std::endl;
+		}
+	}
+	
 	Vertex_coord_map coords0, coords1;
 	getCoords(mesh, coords0);
-	laplacianSmoothing(mesh, coords0, coords1);
+	if (lissage == 'n') {
+		laplacianSmoothing(mesh, coords0, coords1);
+	} else if (lissage == 'r') {
+		laplacianSmoothingRadius(mesh, coords0, coords1, radius);
+	}
 	saveColorDistance(mesh, coords0, coords1, "resultMesh.off");
 	return 0;
 }
