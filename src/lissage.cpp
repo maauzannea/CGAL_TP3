@@ -22,6 +22,7 @@ typedef Polyhedron::Halfedge_around_vertex_circulator Halfedge_vertex_circulator
 typedef std::map<Polyhedron::Vertex_handle, Point_3> Vertex_coord_map;
 typedef std::map<Polyhedron::Vertex_handle, double> Vertex_double_map;
 typedef std::map<Polyhedron::Vertex_handle, bool> Vertex_bool_map;
+typedef std::map<Polyhedron::Facet_handle, Vector3> Facet_vector_map;
 typedef std::queue<Polyhedron::Vertex_handle> Vertex_queue;
 
 double maxDist = 0;
@@ -105,7 +106,6 @@ void laplacianSmoothingRadius(Polyhedron &mesh, Vertex_coord_map &coords, Vertex
 	Vertex_bool_map parcours;
 	double x, y, z, impact;
 	double sumArea, areaPoint;
-	int nbPoints;
 	Vertex_queue q;
 	Polyhedron::Vertex_handle v, s;
 	while (v_it != mesh.vertices_end()) {
@@ -113,7 +113,6 @@ void laplacianSmoothingRadius(Polyhedron &mesh, Vertex_coord_map &coords, Vertex
 		y = 0;
 		z = 0;
 		sumArea = 0.0;
-		nbPoints = 0;
 		for (Vertex_iterator i = mesh.vertices_begin(); i != mesh.vertices_end(); i++) {
 			parcours[i] = false;
 		}
@@ -147,6 +146,38 @@ void laplacianSmoothingRadius(Polyhedron &mesh, Vertex_coord_map &coords, Vertex
 		newCoords[v_it] = Point_3(x/sumArea, y/sumArea, z/sumArea);
 		++v_it;
 	}
+}
+
+void computeSmoothNormals(Polyhedron &mesh, Vertex_coord_map &coords, Facet_vector_map &normalMap, double radius) {
+	Facet_iterator f_it = mesh.facets_begin();
+	Polyhedron::Vertex_handle v1, v2, v3;
+	Vertex_coord_map newCoords;
+	laplacianSmoothingRadius(mesh, coords, newCoords, radius);
+	while (f_it != mesh.facets_end()) {
+		Halfedge_facet_circulator h_it = f_it->facet_begin();
+		v1 = h_it->vertex();
+		h_it++;
+		v2 = h_it->vertex();
+		h_it++;
+		v3 = h_it->vertex();
+		normalMap[f_it] = CGAL::normal(newCoords[v1], newCoords[v2], newCoords[v3]);
+		++f_it;
+	}
+}
+
+void centerFace(Facet &f, Point_3 &cq) {
+	Point_3 p1, p2, p3;
+	Halfedge_facet_circulator h_it = f->facet_begin();
+	p1 = h_it->vertex()->point();
+	h_it++;
+	p2 = h_it->vertex()->point();
+	h_it++;
+	p3 = h_it->vertex()->point();
+	cq = Point_3((p1.x() + p2.x() + p3.x())/3, (p1.y() + p2.y() + p3.y())/3, (p1.z() + p2.z() + p3.z())/3);
+}
+
+void smoothingByNormals(Polyhedron &mesh, Vertex_coord_map &coords, double radius, Facet_vector_map &normals, Vertex_coord_map &newCoords) {
+	
 }
 
 void save(Polyhedron &mesh, Vertex_coord_map &coords, const char *filename) {
