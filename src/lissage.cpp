@@ -128,8 +128,8 @@ void laplacianSmoothingRadius(Polyhedron &mesh, Vertex_coord_map &coords, Vertex
 				areaPoint += areaComputing(f);
 			} while (h_it != v->vertex_begin());
 			//impact = pond(v->point(), v_it->point(), radius);
-			//impact = pond(v->point(), v_it->point(), radius) * pond(v->point(), v_it->point(), radius);
-			impact = 1 - (pond(v->point(), v_it->point(), radius) * pond(v->point(), v_it->point(), radius));
+			impact = pond(v->point(), v_it->point(), radius) * pond(v->point(), v_it->point(), radius);
+			//impact = 1 - (pond(v->point(), v_it->point(), radius) * pond(v->point(), v_it->point(), radius));
 			x += coords[v].x() * areaPoint * impact;
 			y += coords[v].y() * areaPoint * impact;
 			z += coords[v].z() * areaPoint * impact;
@@ -176,9 +176,36 @@ void centerFace(Facet &f, Point_3 &cq) {
 	cq = Point_3((p1.x() + p2.x() + p3.x())/3, (p1.y() + p2.y() + p3.y())/3, (p1.z() + p2.z() + p3.z())/3);
 }
 
-void smoothingByNormals(Polyhedron &mesh, Vertex_coord_map &coords, double radius, Facet_vector_map &normals, Vertex_coord_map &newCoords) {
-	
-}
+/*void smoothingByNormals(Polyhedron &mesh, Vertex_coord_map &coords, double radius, Facet_vector_map &normals, Vertex_coord_map &newCoords) {
+	Vertex_iterator v_it = mesh.vertices_begin();
+	Vertex_bool_map parcours;
+	Vertex_queue q;
+	Polyhedron::Vertex_handle v, s;
+	while (v_it != mesh.vertices_end()) {
+		x = 0;
+		y = 0;
+		z = 0;
+		for (Vertex_iterator i = mesh.vertices_begin(); i != mesh.vertices_end(); i++) {
+			parcours[i] = false;
+		}
+		q.push(v_it);
+		parcours[v_it] = true;
+		while (!q.empty()) {
+			v = q.front();
+			q.pop();
+			Halfedge_vertex_circulator h_it = v->vertex_begin();
+			do {
+				s = h_it->opposite()->vertex();
+				if (!parcours[s] && sqrt(CGAL::squared_distance(v_it->point(), s->point())) < radius) {
+					q.push(s);
+					parcours[s] = true;
+				}
+				++h_it;
+			} while (h_it != v->vertex_begin());
+		}
+		++v_it;
+	}
+}*/
 
 void save(Polyhedron &mesh, Vertex_coord_map &coords, const char *filename) {
 	std::fstream output(filename);
